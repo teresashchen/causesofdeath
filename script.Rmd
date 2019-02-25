@@ -1,5 +1,5 @@
 ---
-title: "Cause of Death"
+title: "Causes of Death"
 author: "Teresa Chen"
 date: "2/24/2019"
 output: html_document
@@ -10,8 +10,9 @@ library(tidyverse)
 library(rio)
 library(here)
 library(gganimate)
-library("paletteer")
-
+library(paletteer)
+library(maps)
+library(ggmap)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -35,14 +36,22 @@ df <- import(here::here("data", "Leading_Causes_of_Death__United_States.csv"),
 
 #str(df)
 
-# clean dataframe to keep useful column  
+# clean dataframe to keep useful columns  
 
 tidy_df <- df %>% 
   dplyr::select(year, cause_name, state, deaths, age_adjusted_death_rate) %>%   
   mutate(cause = as.factor(cause_name),
          state = as.factor(state),
          rate = age_adjusted_death_rate/100) %>%  #rate is in decimal value 
-  dplyr::select(year, state, cause, deaths, rate)
+  dplyr::select(year, state, cause, deaths, rate) %>% 
+  
+  # filter out "all causes"
+  filter(cause != "All causes") %>% 
+  
+  # replace "CLRD" with its whole name
+  mutate(cause = replace(as.character(cause), 
+                         cause == "CLRD", 
+                         "Chronic lower respiratory diseases"))
 
 head(tidy_df)
 skimr::skim(tidy_df)
@@ -67,23 +76,16 @@ The first plot is intended to deliver a message to **general population** and is
 
 
 plot1_v1 <- tidy_df %>% 
-  # filter out "all causes"
-  filter(cause != "All causes") %>% 
-  
-  # replace "CLRD" with its whole name
-  mutate(cause = replace(as.character(cause), 
-                         cause == "CLRD", 
-                         "Chronic lower respiratory diseases")) %>%
   
   # calculate yearly total deaths from all states
   group_by(year, cause) %>% 
-  mutate(deaths_by_year_cause = sum(deaths)) %>%
-  ungroup() %>% 
+  summarise(deaths_by_year_cause = sum(deaths)) %>%
   
   # plot
   ggplot(aes(x = fct_reorder(cause, deaths_by_year_cause), 
              y = deaths_by_year_cause/1000000)) +
-    geom_col(fill = "steelblue") +
+    geom_col(fill = "steelblue",
+             alpha = 0.7) +
     scale_y_continuous(expand = c(0, 0)) +
     coord_flip() +
     facet_wrap(~year, ncol = 3) +
@@ -92,7 +94,8 @@ plot1_v1 <- tidy_df %>%
           plot.title = element_text(face = "bold")) +
     labs(y = "No. of deaths (in millions)",
          x = "Causes of deaths",
-         title = "Heart disease is a leading cause of death over years")
+         title = "Heart disease is a leading cause of death over years",
+         caption = "Source: Centers for Disease Control and Prevention")
          
 
 plot1_v1
@@ -108,18 +111,14 @@ plot1_v1
 ```{r plot1_v2}
 
 plot1_v2 <- tidy_df %>% 
-  filter(cause != "All causes") %>% 
-  mutate(cause = replace(as.character(cause), 
-                         cause == "CLRD", 
-                         "Chronic lower respiratory diseases")) %>% 
   group_by(year, cause) %>% 
-  mutate(deaths_by_year_cause = sum(deaths)) %>%
-  ungroup() %>% 
+  summarise(deaths_by_year_cause = sum(deaths)) %>%
   
   # plot
   ggplot(aes(x = fct_reorder(cause, deaths_by_year_cause), 
              y = deaths_by_year_cause/1000000)) +
-    geom_col(fill = "steelblue") +
+    geom_col(fill = "steelblue",
+             alpha = 0.7) +
     scale_y_continuous(expand = c(0, 0)) +
     coord_flip() +
     theme_minimal(base_size = 15) +
@@ -140,20 +139,15 @@ animate(plot1_v2, duration = 25,
 
 ```
 
-
+# Plot 1: version 3
 
 ```{r plot1_v3}
 
 plot1_v3 <- tidy_df %>% 
-  filter(cause != "All causes") %>% 
-  mutate(cause = replace(as.character(cause), 
-                         cause == "CLRD", 
-                         "Chronic lower respiratory diseases")) %>%
   group_by(year, cause) %>% 
-  mutate(deaths_by_year_cause = sum(deaths)) %>%
-  
-  #choose one state to rank the deaths_by_year_cause (rank 1-10) each year
-  filter(state =="Oregon") %>% 
+  summarise(deaths_by_year_cause = sum(deaths)) %>% 
+
+  # creat rank per year
   group_by(year) %>% 
   arrange(desc(deaths_by_year_cause)) %>% 
   mutate(rank = row_number()) %>% 
@@ -173,7 +167,7 @@ plot1_v3 <- tidy_df %>%
                     transition_length = 1,
                     state_length = 3) +
   ease_aes('sine-in-out') +
-  theme_void(base_size = 30) +
+  theme_void(base_size = 28) +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(title = "Rank of causes of death: {closest_state}") +
   guides(color = "none")
@@ -184,6 +178,128 @@ animate(plot1_v3, duration = 30, nframes = 300,
         renderer = gifski_renderer(width = 1200))
 ```
 
+# Plot 2
+
+The second plot is for **policy-maker or health-related research** and is a quick summary plot regarding changes in death causes over years. 
+
+```{r plot2, fig.width=18, fig.height=25}
+
+  
+# create a new df so annotation can be added 
+
+df_plot2 <- tidy_df %>% 
+  group_by(year, cause) %>% 
+  summarise(deaths_by_year_cause = sum(deaths))  
+  
+
+df_plot2 %>% 
+  ggplot(aes(x = year, y = deaths_by_year_cause/1000000, color = cause)) +
+    geom_line(size = 2) +
+    scale_x_continuous(breaks = seq(1999, 2016, by = 2),
+                       expand = c(0, 0)) +
+    scale_y_log10(expand = c(0, 0),
+                  breaks = c(0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5)) + 
+    scale_color_paletteer_d(rcartocolor, Vivid) +
+    theme_minimal(base_size = 30) +
+    theme(panel.grid.minor = element_blank()) +
+    geom_text(data = filter(df_plot2, year == 2016),
+              aes(label = cause),
+              nudge_x = 3,
+              hjust = 1.5,
+              size = 8) +
+    guides(color = "none") 
+              
+  
+  
+```
+
+## What to improved?
+
+Annotations of cause seems really hard to be ajusted/organized in a neat way.
+
+# Plot 2 version 2
+
+```{r plot2_v2, fig.width=18, fig.height=13}
 
 
+
+tidy_df %>% 
+  group_by(year, cause) %>% 
+  summarise(deaths_by_year_cause = sum(deaths)) %>% 
+  mutate(cause = factor(cause, 
+                        levels = c("Heart disease", "Cancer", "Unintentional injuries",
+                                   "Chronic lower respiratory diseases", "Stroke", "Alzheimer's disease", "Diabetes", "Influenza and pneumonia", "Kidney disease" , "Suicide"  
+                                   ))) %>% 
+  ggplot(aes(x = year, y = deaths_by_year_cause/1000000, color = cause)) +
+    geom_line(size = 2) +
+    scale_x_continuous(breaks = seq(1999, 2016, by = 2),
+                       expand = c(0, 0)) +
+    scale_y_log10(expand = c(0, 0),
+                  breaks = c(0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5)) + 
+    scale_color_paletteer_d(rcartocolor, Vivid) +
+    theme_minimal(base_size = 30) +
+    theme(panel.grid.minor = element_blank(),
+          legend.key.size = unit(3, 'lines'),
+          plot.title = element_text(face = "bold"),
+          plot.subtitle = element_text(face = "italic")) +
+    labs(title = "Caues of Death Across Years",
+         subtitle = "Heart disease and cancer are top 2 causes of deaths.\nAlzheimer's disease increases rapdly.",
+         x = "Year",
+         y = "No. of deaths (in millions)",
+         caption = "Source: Centers for Disease Control and Prevention ",
+         color = "")
+
+```
+
+```{r plot3, fig.width=25, fig.height=35}
+
+usa <- as_tibble(map_data("state"))
+usa$region <- str_to_title(usa$region)
+usa <- usa %>%
+  rename(state = region)
+
+
+
+distinct_by_state <- tidy_df %>% 
+  
+  # creat rank per year and state
+  group_by(year, state) %>% 
+  arrange(desc(deaths)) %>% 
+  mutate(rank = row_number()) %>% 
+  arrange(year) %>% 
+  ungroup() %>% 
+  
+  # only select rank no. 1
+  filter(rank == 1,
+         state != "United States")
+
+
+distinct_map <- full_join(usa, distinct_by_state, by = "state") %>% 
+  filter(!is.na(lat), !is.na(long), !is.na(year))
+
+
+# map data with USA states
+
+plot3 <- distinct_map  %>% 
+  mutate(cause = factor(cause, levels = c("Heart disease", "Cancer"))) %>% 
+  ggplot(aes(long, lat, group = group, fill = cause))+
+  geom_polygon(color = "white")+
+  coord_map()+
+  labs(title = "Distinct Cause of Death",
+       subtitle = "Cancer emerges as a leading cause in early 20th.",
+       caption = "Source: Centers for Disease Control and Prevention ",
+       fill = "")+
+  theme_void(base_size = 35) +
+  facet_wrap(~year, ncol = 3) +
+  theme(plot.title = element_text(face = "bold",
+                                  hjust = 0.5,
+                                  vjust = 10),
+        plot.subtitle = element_text(face = "italic",
+                                     hjust = 0.5,
+                                     vjust = 10),
+        legend.position = "top")
+
+plot3
+
+```
 
