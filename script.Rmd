@@ -1,0 +1,189 @@
+---
+title: "Cause of Death"
+author: "Teresa Chen"
+date: "2/24/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rio)
+library(here)
+library(gganimate)
+library("paletteer")
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r importdata, include=FALSE}
+
+# Import dataframe and rename it as df
+
+df <- import(here::here("data", "Leading_Causes_of_Death__United_States.csv"),
+              setclass = "tbl_df") %>% 
+  janitor::clean_names()
+
+
+```
+
+
+# Overview of data
+
+```{r tidydf}
+
+#str(df)
+
+# clean dataframe to keep useful column  
+
+tidy_df <- df %>% 
+  dplyr::select(year, cause_name, state, deaths, age_adjusted_death_rate) %>%   
+  mutate(cause = as.factor(cause_name),
+         state = as.factor(state),
+         rate = age_adjusted_death_rate/100) %>%  #rate is in decimal value 
+  dplyr::select(year, state, cause, deaths, rate)
+
+head(tidy_df)
+skimr::skim(tidy_df)
+```
+
+# Summary of data:
+
+1. No missing data. 
+2. There are `r length(unique(tidy_df$cause))` cuases of death, including 
+`r unique(tidy_df$cause)`
+3. There are `r length(unique(tidy_df$state))` states. 
+4. Dataframe has data from 1999 to 2016 (`r 2016-1999+1` years).
+
+
+# Plot 1
+
+The first plot is intended to deliver a message to **general population** and is trying to answer *what leading death causes are across years*. 
+
+```{r plot1_v1, fig.width=15, fig.height=20}
+
+
+
+
+plot1_v1 <- tidy_df %>% 
+  # filter out "all causes"
+  filter(cause != "All causes") %>% 
+  
+  # replace "CLRD" with its whole name
+  mutate(cause = replace(as.character(cause), 
+                         cause == "CLRD", 
+                         "Chronic lower respiratory diseases")) %>%
+  
+  # calculate yearly total deaths from all states
+  group_by(year, cause) %>% 
+  mutate(deaths_by_year_cause = sum(deaths)) %>%
+  ungroup() %>% 
+  
+  # plot
+  ggplot(aes(x = fct_reorder(cause, deaths_by_year_cause), 
+             y = deaths_by_year_cause/1000000)) +
+    geom_col(fill = "steelblue") +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_flip() +
+    facet_wrap(~year, ncol = 3) +
+    theme_minimal(base_size = 20) +
+    theme(panel.grid.minor = element_blank(),
+          plot.title = element_text(face = "bold")) +
+    labs(y = "No. of deaths (in millions)",
+         x = "Causes of deaths",
+         title = "Heart disease is a leading cause of death over years")
+         
+
+plot1_v1
+```
+
+## What can be improved?
+
+1. Too many facets. A total of 18 facets make it hard to compare causes of death across years.
+2. Rank of causes changes. `fct_reorder` uses cannot reflect an accurate rank in each year (ex. 2016)
+
+# Plot 1: version 2
+
+```{r plot1_v2}
+
+plot1_v2 <- tidy_df %>% 
+  filter(cause != "All causes") %>% 
+  mutate(cause = replace(as.character(cause), 
+                         cause == "CLRD", 
+                         "Chronic lower respiratory diseases")) %>% 
+  group_by(year, cause) %>% 
+  mutate(deaths_by_year_cause = sum(deaths)) %>%
+  ungroup() %>% 
+  
+  # plot
+  ggplot(aes(x = fct_reorder(cause, deaths_by_year_cause), 
+             y = deaths_by_year_cause/1000000)) +
+    geom_col(fill = "steelblue") +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_flip() +
+    theme_minimal(base_size = 15) +
+    theme(panel.grid.minor = element_blank(),
+          plot.margin = margin(1, 0.5, 1, 0.5, "cm")) +
+    transition_time(year) +
+    labs(title = "Top 10 Causes of Deaths",
+         subtitle = "Year: {round(frame_time)}",
+         caption = "Source: Centers for Disease Control and Prevention",
+         y = "No. of deaths (in millions)",
+         x = "Causes of deaths")
+
+
+animate(plot1_v2, duration = 25,  
+                  nframes = 100, 
+                  end_pause = 10,
+                  renderer = gifski_renderer(width = 1000))
+
+```
+
+
+
+```{r plot1_v3}
+
+plot1_v3 <- tidy_df %>% 
+  filter(cause != "All causes") %>% 
+  mutate(cause = replace(as.character(cause), 
+                         cause == "CLRD", 
+                         "Chronic lower respiratory diseases")) %>%
+  group_by(year, cause) %>% 
+  mutate(deaths_by_year_cause = sum(deaths)) %>%
+  
+  #choose one state to rank the deaths_by_year_cause (rank 1-10) each year
+  filter(state =="Oregon") %>% 
+  group_by(year) %>% 
+  arrange(desc(deaths_by_year_cause)) %>% 
+  mutate(rank = row_number()) %>% 
+  arrange(year) %>% 
+  ungroup() %>% 
+  
+  #plot
+  ggplot(aes(x = '{frame_time}', y = rank)) +
+  geom_text(aes(label = cause, 
+                color = cause,
+                group = cause),
+            size = 8) +
+  scale_x_discrete(labels = NULL) +
+  scale_y_reverse() +
+  scale_color_paletteer_d(rcartocolor, Vivid) +
+  transition_states(year, 
+                    transition_length = 1,
+                    state_length = 3) +
+  ease_aes('sine-in-out') +
+  theme_void(base_size = 30) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Rank of causes of death: {closest_state}") +
+  guides(color = "none")
+  
+  
+
+animate(plot1_v3, duration = 30, nframes = 300,
+        renderer = gifski_renderer(width = 1200))
+```
+
+
+
+
