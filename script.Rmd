@@ -12,7 +12,7 @@ library(here)
 library(gganimate)
 library(paletteer)
 library(maps)
-library(ggmap)
+
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -103,8 +103,8 @@ plot1_v1
 
 ## What can be improved?
 
-1. Too many facets. A total of 18 facets make it hard to compare causes of death across years.
-2. Rank of causes changes. `fct_reorder` uses cannot reflect an accurate rank in each year (ex. 2016)
+Too many facets. A total of 18 facets make it hard to compare causes of death across years.
+
 
 # Plot 1: version 2
 
@@ -138,6 +138,11 @@ animate(plot1_v2, duration = 25,
                   renderer = gifski_renderer(width = 1000))
 
 ```
+
+## What can be improved?
+
+Rank of causes changes. `fct_reorder` cannot reflect an accurate rank of causes on y-axis.
+
 
 # Plot 1: version 3
 
@@ -178,6 +183,11 @@ animate(plot1_v3, duration = 30, nframes = 300,
         renderer = gifski_renderer(width = 1200))
 ```
 
+## Something to be improved (in progress)
+
+I am trying to combine the feasures of version 1 and version 2 to plot bra graph animation with changes in y axis accroding to the rank of cuases.
+
+
 # Plot 2
 
 The second plot is for **policy-maker or health-related research** and is a quick summary plot regarding changes in death causes over years. 
@@ -213,9 +223,9 @@ df_plot2 %>%
   
 ```
 
-## What to improved?
+## What to be improved?
 
-Annotations of cause seems really hard to be ajusted/organized in a neat way.
+Annotations of cause seems really hard to be ajusted/organized in a neat way. I failed to get a perfect annotation by ajusting fig.height, fig.width, or nudge_x.
 
 # Plot 2 version 2
 
@@ -251,6 +261,10 @@ tidy_df %>%
 
 ```
 
+# Plot 3
+
+The last plot is for both parties and is for displaying a distinct death causes in each state. 
+
 ```{r plot3, fig.width=25, fig.height=35}
 
 usa <- as_tibble(map_data("state"))
@@ -285,7 +299,7 @@ plot3 <- distinct_map  %>%
   ggplot(aes(long, lat, group = group, fill = cause))+
   geom_polygon(color = "white")+
   coord_map()+
-  labs(title = "Distinct Cause of Death",
+  labs(title = "A Distinct Cause of Death",
        subtitle = "Cancer emerges as a leading cause in early 20th.",
        caption = "Source: Centers for Disease Control and Prevention ",
        fill = "")+
@@ -300,6 +314,31 @@ plot3 <- distinct_map  %>%
         legend.position = "top")
 
 plot3
+
+```
+
+## Something to be improved (in progress)
+
+I tried to animate the above graph but failed to make the transisition smmothly. Debugin now. 
+
+
+```{r}
+
+ani_plot3 <- distinct_map  %>% 
+  mutate(cause = factor(cause, levels = c("Heart disease", "Cancer"))) %>% 
+  ggplot(aes(long, lat, group = group, fill = cause))+
+  geom_polygon(color = "white")+
+  coord_map()+
+  theme_void() +
+  transition_time(year) +
+  labs(title = "A Distinct Cause of Death\nCancer emerges as a leading cause in early 20th.",
+       subtitle = "Year: {round(frame_time)}",
+       caption = "Source: Centers for Disease Control and Prevention ",
+       fill = "")
+
+
+
+animate(ani_plot3, duration = 30, renderer = gifski_renderer(width = 1200))
 
 ```
 
