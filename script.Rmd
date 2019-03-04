@@ -6,16 +6,28 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+# ASH: To enhance reproducability/make life easier on those reviewing your work, it may be worthwhile to include install.packages for each package you require:
+#install.packages("tidyverse")
+#install.packages("rio")
+#install.packages("here")
+#install.packages("gganimate")
+#install.packages("paletteer")
+#install.packages("maps")
+#install.packages("skimr")
+
 library(tidyverse)
 library(rio)
 library(here)
 library(gganimate)
 library(paletteer)
 library(maps)
+library(skimr) # ASH: library was not included/loaded, but apparently it is needed
 
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE) # ASH: I added this because when I knitted your document, the warning messages were a little distracting
+
 ```
-
 
 
 ```{r importdata, include=FALSE}
@@ -29,7 +41,6 @@ df <- import(here::here("data", "Leading_Causes_of_Death__United_States.csv"),
 
 ```
 
-
 # Overview of data
 
 ```{r tidydf}
@@ -39,17 +50,15 @@ df <- import(here::here("data", "Leading_Causes_of_Death__United_States.csv"),
 # clean dataframe to keep useful columns  
 
 tidy_df <- df %>% 
-  dplyr::select(year, cause_name, state, deaths, age_adjusted_death_rate) %>%   
+  dplyr::select(year, cause_name, state, deaths, age_adjusted_death_rate) %>% 
   mutate(cause = as.factor(cause_name),
          state = as.factor(state),
          rate = age_adjusted_death_rate/100) %>%  #rate is in decimal value 
   dplyr::select(year, state, cause, deaths, rate) %>% 
-  
   # filter out "all causes"
   filter(cause != "All causes") %>% 
-  
   # replace "CLRD" with its whole name
-  mutate(cause = replace(as.character(cause), 
+  mutate(cause = replace(as.character(cause),
                          cause == "CLRD", 
                          "Chronic lower respiratory diseases"))
 
@@ -60,20 +69,16 @@ skimr::skim(tidy_df)
 # Summary of data:
 
 1. No missing data. 
-2. There are `r length(unique(tidy_df$cause))` cuases of death, including 
+2. There are `r length(unique(tidy_df$cause))` causes of death, including 
 `r unique(tidy_df$cause)`
 3. There are `r length(unique(tidy_df$state))` states. 
 4. Dataframe has data from 1999 to 2016 (`r 2016-1999+1` years).
-
 
 # Plot 1
 
 The first plot is intended to deliver a message to **general population** and is trying to answer *what leading death causes are across years*. 
 
 ```{r plot1_v1, fig.width=15, fig.height=20}
-
-
-
 
 plot1_v1 <- tidy_df %>% 
   
@@ -95,7 +100,7 @@ plot1_v1 <- tidy_df %>%
     labs(y = "No. of deaths (in millions)",
          x = "Causes of deaths",
          title = "Heart disease is a leading cause of death over years",
-         caption = "Source: Centers for Disease Control and Prevention")
+         caption = "Source: Centers for Disease Control and Prevention") # ASH: Nice addition
          
 
 plot1_v1
@@ -104,7 +109,6 @@ plot1_v1
 ## What can be improved?
 
 Too many facets. A total of 18 facets make it hard to compare causes of death across years.
-
 
 # Plot 1: version 2
 
@@ -137,12 +141,13 @@ animate(plot1_v2, duration = 25,
                   end_pause = 10,
                   renderer = gifski_renderer(width = 1000))
 
+# ASH: This is seriously one of the coolest bar graphs I've seen. Is there a way to enhance the resolution of the image? Maybe find a way to wrap the text for some of the source labels that are super long (e.g., Chronic lower respiratory diseases)? Given the title, I think you could also get rid of the x-axis label ("Causes of death") entirely.
+
 ```
 
 ## What can be improved?
 
 Rank of causes changes. `fct_reorder` cannot reflect an accurate rank of causes on y-axis.
-
 
 # Plot 1: version 3
 
@@ -171,22 +176,24 @@ plot1_v3 <- tidy_df %>%
   transition_states(year, 
                     transition_length = 1,
                     state_length = 3) +
-  ease_aes('sine-in-out') +
+  ease_aes('sine-in-out') + 
   theme_void(base_size = 28) +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(title = "Rank of causes of death: {closest_state}") +
   guides(color = "none")
   
-  
-
 animate(plot1_v3, duration = 30, nframes = 300,
         renderer = gifski_renderer(width = 1200))
+
+# ASH: While this is a great way to depict the ranking of causes of death, I think I prefer version 2. I prefer the previous version because it provides more info--particuarily in terms of how far ahead heart disease and cancer are from the rest of causes of death. Though, I suppose you could use text size to represent the number of deaths (i.e., heart disease and cancer would have the largest text, whereas suicide would have the smallest)?
+
 ```
 
 ## Something to be improved (in progress)
 
-I am trying to combine the feasures of version 1 and version 2 to plot bra graph animation with changes in y axis accroding to the rank of cuases.
+I am trying to combine the features of version 1 and version 2 to plot bra graph animation with changes in y axis according to the rank of causes.
 
+### ASH: Awesome, I cannot wait to see the final product!
 
 # Plot 2
 
@@ -194,14 +201,12 @@ The second plot is for **policy-maker or health-related research** and is a quic
 
 ```{r plot2, fig.width=18, fig.height=25}
 
-  
 # create a new df so annotation can be added 
 
 df_plot2 <- tidy_df %>% 
   group_by(year, cause) %>% 
-  summarise(deaths_by_year_cause = sum(deaths))  
+  summarise(deaths_by_year_cause = sum(deaths))
   
-
 df_plot2 %>% 
   ggplot(aes(x = year, y = deaths_by_year_cause/1000000, color = cause)) +
     geom_line(size = 2) +
@@ -209,7 +214,7 @@ df_plot2 %>%
                        expand = c(0, 0)) +
     scale_y_log10(expand = c(0, 0),
                   breaks = c(0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5)) + 
-    scale_color_paletteer_d(rcartocolor, Vivid) +
+    scale_color_paletteer_d(rcartocolor, Vivid) + # ASH: Is this color-blind friendly?
     theme_minimal(base_size = 30) +
     theme(panel.grid.minor = element_blank()) +
     geom_text(data = filter(df_plot2, year == 2016),
@@ -218,20 +223,37 @@ df_plot2 %>%
               hjust = 1.5,
               size = 8) +
     guides(color = "none") 
-              
-  
+
+# This is a great start! I'd just clean up this graph a little bit by renaming your y-axis title and getting rid of the x-axis label (year). Like you mention below, the labels above each line are also a little overwhelming in that some of them are a difficult to read when they overlap with their associated line (e.g., kidney disease). Did you try to extend the x-axis first, then and shift all of the labels over to the right/align them? I assume this is what you were referring to in your comment below (line 254). If you could somehow figure this out, I think I'd prefer this version over the second version. One last thing to note is that I think the specified height and/or base size of the graph is a bit too large. When I view it on my computer, I have to scroll through the image to see everything. 
+
+# ASH: Alternatively, you could try playing around with gghighlight (see below for an example)? It might be interesting to highlight the top 2 causes of death, as well as whichever causes of death show the largest slope (e.g., Alzheimer's and suicide)? It would also be cool if you could use ggvis to create an interactive plot with a drop down menu allowing you to select a given cause of death, thereby highlighting the selected cause and keeping all others grey?
+
+library(gghighlight)
+
+df_plot2 %>% 
+  ggplot(aes(x = year, y = deaths_by_year_cause/1000000, color = cause)) +
+    geom_line(size = 2) +
+    gghighlight(cause == "Heart disease" |
+                cause == "Cancer" |
+                cause == "Unintentional injuries") + #I just selected these because they were the top 3
+    scale_x_continuous(breaks = seq(1999, 2016, by = 2),
+                       expand = c(0, 0)) +
+    scale_y_log10(expand = c(0, 0),
+                  breaks = c(0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5)) + 
+    scale_color_paletteer_d(rcartocolor, Vivid) +
+    theme_minimal(base_size = 30) +
+    theme(panel.grid.minor = element_blank()) +
+    guides(color = "none") 
   
 ```
 
 ## What to be improved?
 
-Annotations of cause seems really hard to be ajusted/organized in a neat way. I failed to get a perfect annotation by ajusting fig.height, fig.width, or nudge_x.
+Annotations of cause seems really hard to be adjusted/organized in a neat way. I failed to get a perfect annotation by adjusting fig.height, fig.width, or nudge_x.
 
 # Plot 2 version 2
 
 ```{r plot2_v2, fig.width=18, fig.height=13}
-
-
 
 tidy_df %>% 
   group_by(year, cause) %>% 
@@ -252,12 +274,14 @@ tidy_df %>%
           legend.key.size = unit(3, 'lines'),
           plot.title = element_text(face = "bold"),
           plot.subtitle = element_text(face = "italic")) +
-    labs(title = "Caues of Death Across Years",
-         subtitle = "Heart disease and cancer are top 2 causes of deaths.\nAlzheimer's disease increases rapdly.",
+    labs(title = "Cause of Death Across Years",
+         subtitle = "Heart disease and cancer are top 2 causes of deaths.\nAlzheimer's disease increases rapidly.",
          x = "Year",
          y = "No. of deaths (in millions)",
          caption = "Source: Centers for Disease Control and Prevention ",
          color = "")
+
+# ASH: Very pretty! The only critique I have is that by having so many items in the legend, cognitive load has increased substantially.
 
 ```
 
@@ -272,24 +296,20 @@ usa$region <- str_to_title(usa$region)
 usa <- usa %>%
   rename(state = region)
 
-
-
 distinct_by_state <- tidy_df %>% 
-  
   # creat rank per year and state
   group_by(year, state) %>% 
   arrange(desc(deaths)) %>% 
   mutate(rank = row_number()) %>% 
   arrange(year) %>% 
   ungroup() %>% 
-  
   # only select rank no. 1
   filter(rank == 1,
          state != "United States")
 
 
 distinct_map <- full_join(usa, distinct_by_state, by = "state") %>% 
-  filter(!is.na(lat), !is.na(long), !is.na(year))
+  filter(!is.na(lat), !is.na(long), !is.na(year)) 
 
 
 # map data with USA states
@@ -319,10 +339,9 @@ plot3
 
 ## Something to be improved (in progress)
 
-I tried to animate the above graph but failed to make the transisition smmothly. Debugin now. 
+I tried to animate the above graph but failed to make the transition smoothly. Debugin now. 
 
-
-```{r}
+```{r plot3v2}
 
 ani_plot3 <- distinct_map  %>% 
   mutate(cause = factor(cause, levels = c("Heart disease", "Cancer"))) %>% 
@@ -340,5 +359,24 @@ ani_plot3 <- distinct_map  %>%
 
 animate(ani_plot3, duration = 30, renderer = gifski_renderer(width = 1200))
 
+# ASH: Another amazing plot--this is probably my favorite! I honestly don't think the transition is too clunky. I'd just adjust the colors and try to enhance the image's resolution. Maybe you could also include labels above each state (e.g., OR for Oregon, CA for California, etc.)?
+
 ```
 
+**Ashley's peer review breakdown**
+
+Three areas of strength:
+
+  + Your coding style/code itself is great--you've gone beyond what was expected and required. In my opinion, you displayed mastery of coding with the tidyverse and more:
+      + Your use of inline code (e.g., 71-75) was impressive—I still struggle with this.
+      + You use a variety of functions not covered in class (most involving gganimate and geospatial maps), which is quite sophisticated in my opinion.
+      + Your understanding of Rmarkdown/how to knit visually pleasing files is certainly remarkable!
+  + I also really appreciate your coding strategy. You broke down each problem/plot into sub-problems/versions leading up to your final plot. 
+  + Your code is efficient, correct, and minimal. You did a great job keeping it simple and to the point. Namely: 
+      + I appreciated the fact that you didn’t have too many items in your environment.
+      + I like how your variable names were all short yet descriptive enough to know what you were referring to. 
+      + You were also very consistent in the naming of your variables (all lowercase and snake case).
+
+Something new I learned:
+
+  + I didn't know how to convert the variable class and recode it within the same function (see line 61)--this is good to know!
