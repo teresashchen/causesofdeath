@@ -322,7 +322,7 @@ plot3
 I tried to animate the above graph but failed to make the transisition smmothly. Debugin now. 
 
 
-```{r}
+```{r, eval = FALSE}
 
 ani_plot3 <- distinct_map  %>% 
   mutate(cause = factor(cause, levels = c("Heart disease", "Cancer"))) %>% 
